@@ -1,28 +1,45 @@
 pipeline {
     agent any
+    environment {
+        AWS_REGION = 'eu-west-2'
+        EKS_CLUSTER_NAME = 'chat-app-cluster'
+        DOCKER_IMAGE = 'ngozin/chat-app:latest'
+        KUBECONFIG = '/home/jenkins/.kube/config'
+    }
     stages {
-        stage('Build') {
+        stage('Checkout Code') {
             steps {
-                sh 'docker build -t ngozin/chat-app .'
+                git branch: 'main', url: 'https://github.com/Ngozi-N/Chat_App_Project.git'
             }
         }
-        stage('Test') {
+        stage('Terraform Deploy') {
             steps {
-                sh 'echo "Run your tests here"'
+                sh '''
+                terraform init
+                terraform apply -auto-approve
+                '''
             }
         }
-        stage('Push') {
+        stage('Build Docker Image') {
             steps {
-                withCredentials([string(credentialsId: 'chatappdockerhub', variable: 'DOCKER_PASSWORD')]) {
-                    sh 'echo $DOCKER_PASSWORD | docker login -u ngozin --password-stdin'
-                }
-                sh 'docker push ngozin/chat-app:latest'
+                sh '''
+                docker build -t $DOCKER_IMAGE .
+                docker push $DOCKER_IMAGE
+                '''
             }
         }
-        stage('Deploy') {
+        stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f k8s-deployment.yaml'
+                sh '''
+                kubectl apply -f deployment.yaml
+                kubectl apply -f service.yaml
+                '''
             }
+        }
+    }
+    post {
+        always {
+            cleanWs()
         }
     }
 }
